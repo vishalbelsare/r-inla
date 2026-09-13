@@ -7852,15 +7852,41 @@ int loglikelihood_zeroinflated_betabinomial1(int thread_id, int *UNUSED(lcache_i
 
 	LINK_INIT;
 	if (m > 0) {
-		for (i = 0; i < m; i++) {
-			p = PREDICTOR_INVERSE_LINK(x[i], off);
-			a = p * (1.0 - rho) / rho;
-			b = (p * rho - p - rho + 1.0) / rho;
-			tmp = LOG_1mp(pzero) + normc + gsl_sf_lnbeta(y + a, n - y + b) - gsl_sf_lnbeta(a, b);
+		if (0) {
+			for (i = 0; i < m; i++) {
+				p = PREDICTOR_INVERSE_LINK(x[i], off);
+				a = p * (1.0 - rho) / rho;
+				b = (p * rho - p - rho + 1.0) / rho;
+				tmp = LOG_1mp(pzero) + normc + gsl_sf_lnbeta(y + a, n - y + b) - gsl_sf_lnbeta(a, b);
+				if (y == 0) {
+					logll[i] = GMRFLib_log_apbex(pzero, tmp);
+				} else {
+					logll[i] = tmp;
+				}
+			}
+		} else {
+			double va[2*m], vb[2*m], llbeta[2*m];
+			for (i = 0; i < m; i++) {
+				p = PREDICTOR_INVERSE_LINK(x[i], off);
+				a = p * (1.0 - rho) / rho;
+				b = (p * rho - p - rho + 1.0) / rho;
+				// gsl_sf_lnbeta(y + a, n - y + b)
+				va[i] = y + a;
+				vb[i] = n - y + b;
+				// gsl_sf_lnbeta(a, b);
+				va[m+i] = a;
+				vb[m+i] = b;
+			}
+			inla_lbeta_m((size_t) 2*m, va, vb, llbeta);
 			if (y == 0) {
-				logll[i] = GMRFLib_log_apbex(pzero, tmp);
+				for (i = 0; i < m; i++) {
+					tmp = LOG_1mp(pzero) + normc + llbeta[i] - llbeta[m+i];
+					logll[i] = GMRFLib_log_apbex(pzero, tmp);
+				}
 			} else {
-				logll[i] = tmp;
+				for (i = 0; i < m; i++) {
+					logll[i] = LOG_1mp(pzero) + normc + llbeta[i] - llbeta[m+i];
+				}
 			}
 		}
 	} else {
