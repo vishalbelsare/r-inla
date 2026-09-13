@@ -627,7 +627,8 @@ int *GMRFLib_bsearch_timing(int key, int n, int *array)
 
 int GMRFLib_graph_is_nb(int node, int nnode, GMRFLib_graph_tp *graph)
 {
-	return (GMRFLib_bsearch(node, graph->nnbs[nnode], graph->nbs[nnode]) != NULL);
+	// often NODE is fixed while we loop over NNODE
+	return (GMRFLib_bsearch(nnode, graph->nnbs[node], graph->nbs[node]) != NULL);
 }
 
 int GMRFLib_graph_add_crs_crc(GMRFLib_graph_tp *graph)
@@ -639,11 +640,8 @@ int GMRFLib_graph_add_crs_crc(GMRFLib_graph_tp *graph)
 	int n = graph->n;
 	int N = graph->n + graph->nnz / 2;
 
-	// TAUCS
 	int *colptr = Calloc(graph->n + 1, int);
 	int *rowidx = Calloc(N, int);
-
-	// PARDISO
 	int *rowptr = Calloc(graph->n + 1, int);
 	int *colidx = Calloc(N, int);
 
@@ -2108,7 +2106,7 @@ int GMRFLib_graph_add_sha(GMRFLib_graph_tp *g)
 	}
 
 	GMRFLib_SHA_TP c;
-	unsigned char *md = Calloc(GMRFLib_SHA_DIGEST_LEN + 1, unsigned char);
+	uint8_t *md = Calloc(GMRFLib_SHA_DIGEST_LEN + 1, uint8_t);
 
 	Memset(md, 0, GMRFLib_SHA_DIGEST_LEN + 1);
 	GMRFLib_SHA_Init(&c);
@@ -2120,7 +2118,7 @@ int GMRFLib_graph_add_sha(GMRFLib_graph_tp *g)
 		GMRFLib_SHA_IUPDATE(g->nbs[i], g->nnbs[i], c);
 	}
 
-	GMRFLib_SHA_Final(md, &c);
+	GMRFLib_SHA_Final(&c, md);
 	md[GMRFLib_SHA_DIGEST_LEN] = '\0';
 	g->sha = md;
 

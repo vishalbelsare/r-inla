@@ -449,10 +449,8 @@ static void taucs_ccs_treeorder(taucs_ccs_matrix *m, int **perm, int **invperm)
 	taucs_free(degree);
 }
 void METIS_NodeND(int *, int *, int *, int *, int *, int *, int *);
-void METIS51PARDISO_NodeND(int *, int *, int *, int *, int *, int *, int *);
-#       if !defined(USE_METIS4)
 void taucs_ccs_metis5(taucs_ccs_matrix * m, int **perm, int **invperm, char *which);
-#       endif
+
 static void taucs_ccs_metis(taucs_ccs_matrix *m, int **perm, int **invperm, char *UNUSED(which))
 {
 	// this for metis version 4
@@ -534,11 +532,7 @@ static void taucs_ccs_metis(taucs_ccs_matrix *m, int **perm, int **invperm, char
 	options_flag[5] = 1;				       /* default */
 	options_flag[6] = 0;				       /* this is slow if non-zero. global nodes */
 	options_flag[7] = 3;				       /* number of separators */
-#              if defined(NO_PARDISO_LIB)
 	METIS_NodeND(&n, xadj, adj, &num_flag, options_flag, *perm, *invperm);
-#              else
-	METIS51PARDISO_NodeND(&n, xadj, adj, &num_flag, options_flag, *perm, *invperm);
-#              endif
 	taucs_free(xadj);
 	taucs_free(adj);
 #       endif
@@ -609,46 +603,46 @@ void taucs_ccs_order(taucs_ccs_matrix *m, int **perm, int **invperm, char *which
 }
 #endif							       /* TAUCS_CORE_GENERAL */
 
-taucs_ccs_matrix *taucs_ccs_permute_symmetrically(taucs_ccs_matrix * A, int *UNUSED(perm), int *invperm)
+taucs_ccs_matrix *taucs_ccs_permute_symmetrically(taucs_ccs_matrix *A, int *UNUSED(perm), int *invperm)
 {
-        taucs_ccs_matrix * PAPT = NULL;
+	taucs_ccs_matrix *PAPT = NULL;
 
-        int n = A->n;
-        int nnz = A->colptr[n];
-        PAPT = taucs_dccs_create(n, n, nnz);
-        if (!PAPT)
-                return NULL;
+	int n = A->n;
+	int nnz = A->colptr[n];
+	PAPT = taucs_dccs_create(n, n, nnz);
+	if (!PAPT)
+		return NULL;
 
-        PAPT->flags = A->flags;
-        int *len = (int *) taucs_malloc(n * sizeof(int));
-        memset((void *) len, 0, (size_t) (n * sizeof(int)));
+	PAPT->flags = A->flags;
+	int *len = (int *) taucs_malloc(n * sizeof(int));
+	memset((void *) len, 0, (size_t) (n * sizeof(int)));
 
-        for (int j = 0; j < n; j++) {
-                int JJ = invperm[j];
-                for (int ip = A->colptr[j]; ip < A->colptr[j + 1]; ip++) {
-                        int I = invperm[A->rowind[ip]];
-                        len[IMIN(I, JJ)]++;
-                }
-        }
+	for (int j = 0; j < n; j++) {
+		int JJ = invperm[j];
+		for (int ip = A->colptr[j]; ip < A->colptr[j + 1]; ip++) {
+			int I = invperm[A->rowind[ip]];
+			len[IMIN(I, JJ)]++;
+		}
+	}
 
-        (PAPT->colptr)[0] = 0;
-        for (int j = 1; j <= n; j++)
-                (PAPT->colptr)[j] = (PAPT->colptr)[j - 1] + len[j - 1];
+	(PAPT->colptr)[0] = 0;
+	for (int j = 1; j <= n; j++)
+		(PAPT->colptr)[j] = (PAPT->colptr)[j - 1] + len[j - 1];
 
-        memcpy((void *) len, (void *) (PAPT->colptr), (size_t) (n * sizeof(int)));
-        for (int j = 0; j < n; j++) {
-                int JJ = invperm[j];
-                for (int ip = A->colptr[j]; ip < A->colptr[j + 1]; ip++) {
-                        double AIJ = A->values[ip];
-                        int II = invperm[A->rowind[ip]];
-                        int I = IMAX(II, JJ);
-                        int J = IMIN(II, JJ);
-                        (PAPT->rowind)[len[J]] = I;
-                        (PAPT->values)[len[J]] = AIJ;
-                        len[J]++;
-                }
-        }
+	memcpy((void *) len, (void *) (PAPT->colptr), (size_t) (n * sizeof(int)));
+	for (int j = 0; j < n; j++) {
+		int JJ = invperm[j];
+		for (int ip = A->colptr[j]; ip < A->colptr[j + 1]; ip++) {
+			double AIJ = A->values[ip];
+			int II = invperm[A->rowind[ip]];
+			int I = IMAX(II, JJ);
+			int J = IMIN(II, JJ);
+			(PAPT->rowind)[len[J]] = I;
+			(PAPT->values)[len[J]] = AIJ;
+			len[J]++;
+		}
+	}
 
-        taucs_free(len);
-        return PAPT;
+	taucs_free(len);
+	return PAPT;
 }

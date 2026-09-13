@@ -543,6 +543,8 @@ typedef struct {
 	char *vb_nodes_mean;
 	char *vb_nodes_variance;
 
+	char *gcpo_fixed_nodes;
+
 	/** 
 	 * Try to be smart when optimizing in INLA?   
 	 */
@@ -785,6 +787,7 @@ typedef struct {
 	int correct_hyperpar;
 	int len_weights;				       /* need to check later for Npred... */
 	int num_level_sets;
+	int min_overlap;
 	double epsilon;
 	double sqrt_epsilon;
 	double prior_diagonal;
@@ -1140,7 +1143,7 @@ int GMRFLib_compute_cpodens(int thread_id, GMRFLib_density_tp ** cpo_density, GM
 			    int idx, double d, GMRFLib_logl_tp * loglFunc, void *loglFunc_arg, GMRFLib_ai_param_tp * ai_par);
 int GMRFLib_ai_compute_lincomb(GMRFLib_density_tp *** lindens, double **cross, int nlin, GMRFLib_lc_tp ** Alin, GMRFLib_ai_store_tp * ai_store,
 			       double *improved_mean, int lookup_tables);
-GMRFLib_ai_store_tp *GMRFLib_duplicate_ai_store(GMRFLib_ai_store_tp * ai_store, int skeleton, int copy_ptr, int copy_pardiso_ptr);
+GMRFLib_ai_store_tp *GMRFLib_duplicate_ai_store(GMRFLib_ai_store_tp * ai_store, int skeleton, int copy_ptr);
 int GMRFLib_ai_vb_fit_gaussian(int thread_id, double *ell, double *fitted_mean, double *fitted_prec, int idx, double d,
 			       GMRFLib_logl_tp * loglFunc, void *loglFunc_arg, double *x_vec, double mean, double sd);
 double GMRFLib_ai_vb_mEll(int idx, GMRFLib_density_tp * density, double d, GMRFLib_logl_tp * loglFunc, void *loglFunc_arg,
@@ -1224,7 +1227,7 @@ GMRFLib_gcpo_elm_tp **GMRFLib_gcpo(int thread_id, GMRFLib_ai_store_tp * ai_store
 				   GMRFLib_ai_param_tp * ai_par, GMRFLib_gcpo_param_tp * gcpo_param, double *gcpodens_moments,
 				   GMRFLib_idx_tp * d_idx);
 GMRFLib_gcpo_groups_tp *GMRFLib_gcpo_build(int thread_id, GMRFLib_ai_store_tp * ai_store, GMRFLib_preopt_tp * preopt,
-					   GMRFLib_gcpo_param_tp * gcpo_param, int *fl, GMRFLib_idx_tp * d_idx);
+					   GMRFLib_gcpo_param_tp * gcpo_param, int *fl, GMRFLib_idx_tp * d_idx, char *fixed_nodes);
 
 double inla_compute_saturated_loglik(int, int *, int, GMRFLib_logl_tp *, double *, void *);
 double GMRFLib_prior_mean_eval(int thread_id, GMRFLib_prior_mean_tp * pmean);

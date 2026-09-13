@@ -367,8 +367,6 @@ void taucs_ccs_metis5(taucs_ccs_matrix *m, int **perm, int **invperm, char *UNUS
 		}
 	}
 	int options[METIS_NOPTIONS];
-	// Have to adapt to the PARDISO metis libs
-	// METIS_SetDefaultOptions(options);
 	for (int i = 0; i < METIS_NOPTIONS; i++) {
 		options[i] = -1;
 	}
@@ -395,13 +393,6 @@ void taucs_ccs_metis5(taucs_ccs_matrix *m, int **perm, int **invperm, char *UNUS
 	Free(xadj);
 	Free(adj);
 }
-
-#if defined(INLA_WITH_PARDISO_WORKAROUND)
-int METIS51PARDISO_NodeND(int *i, int *j, int *k, int *l, int *m, int *n, int *o)
-{
-	return METIS_NodeND(i, j, k, l, m, n, o);
-}
-#endif
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wattributes"
@@ -825,10 +816,10 @@ int GMRFLib_build_sparse_matrix_TAUCS(int thread_id, taucs_ccs_matrix **L, GMRFL
 	int fast_copy = (Qfunc == GMRFLib_tabulate_Qfunction_std && arg->Q);
 
 	GMRFLib_SHA_TP c;
-	unsigned char *md = Calloc(GMRFLib_SHA_DIGEST_LEN + 1, unsigned char);
+	uint8_t *md = Calloc(GMRFLib_SHA_DIGEST_LEN + 1, uint8_t);
 	GMRFLib_SHA_Init(&c);
 	GMRFLib_SHA_IUPDATE(iperm, n, c);
-	GMRFLib_SHA_Final(md, &c);
+	GMRFLib_SHA_Final(&c, md);
 	md[GMRFLib_SHA_DIGEST_LEN] = '\0';
 
 	if (fast_copy && cache->sha && cache->rowind && cache->colptr && cache->vperm2 &&

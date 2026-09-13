@@ -1,15 +1,3 @@
-#include <limits.h>
-#include <assert.h>
-#include <stddef.h>
-#include <float.h>
-#include <time.h>
-#include <math.h>
-#include <strings.h>
-#include <string.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <omp.h>
-
 #if !defined(INLA_WITH_DEVEL)
 
 int testit(int UNUSED(argc), char **UNUSED(argv))
@@ -20,9 +8,6 @@ int testit(int UNUSED(argc), char **UNUSED(argv))
 
 #else
 
-#       pragma GCC diagnostic push
-#       pragma GCC diagnostic ignored "-Wattributes"
-__attribute__((target_clones(INLA_CLONE_TARGETS "default")))
 int loglikelihood_testit(int UNUSED(thread_id), int *UNUSED(lcache_idx), double *logll, double *x, int m, int UNUSED(idx), double *x_vec,
 			 double *UNUSED(y_cdf), void *UNUSED(arg))
 {
@@ -44,7 +29,6 @@ int loglikelihood_testit(int UNUSED(thread_id), int *UNUSED(lcache_idx), double 
 	}
 	return GMRFLib_SUCCESS;
 }
-#       pragma GCC diagnostic pop
 
 int loglikelihood_testit1(int UNUSED(thread_id), int *UNUSED(lcache_idx), double *logll, double *x, int m, int UNUSED(idx), double *UNUSED(x_vec),
 			  double *UNUSED(y_cdf), void *arg)
@@ -66,9 +50,6 @@ int loglikelihood_testit1(int UNUSED(thread_id), int *UNUSED(lcache_idx), double
 	return GMRFLib_SUCCESS;
 }
 
-#       pragma GCC diagnostic push
-#       pragma GCC diagnostic ignored "-Wattributes"
-__attribute__((target_clones(INLA_CLONE_TARGETS "default")))
 int loglikelihood_testit2(int UNUSED(thread_id), int *UNUSED(lcache_idx), double *logll, double *x, int m, int UNUSED(idx), double *UNUSED(x_vec),
 			  double *UNUSED(y_cdf), void *arg)
 {
@@ -88,7 +69,6 @@ int loglikelihood_testit2(int UNUSED(thread_id), int *UNUSED(lcache_idx), double
 	}
 	return GMRFLib_SUCCESS;
 }
-#       pragma GCC diagnostic pop
 
 int loglikelihood_testit3(int UNUSED(thread_id), int *UNUSED(lcache_idx), double *logll, double *x, int m, int UNUSED(idx), double *UNUSED(x_vec),
 			  double *UNUSED(y_cdf), void *UNUSED(arg))
@@ -127,9 +107,18 @@ double testit_Qfunc(int UNUSED(thread_id), int i, int j, double *UNUSED(values),
 	return (i == j ? 2 * g->n : -1.0);
 }
 
-#       pragma GCC diagnostic push
-#       pragma GCC diagnostic ignored "-Wattributes"
-__attribute__((target_clones(INLA_CLONE_TARGETS "default")))
+// Force the compiler to keep this symbol even with aggressive LTO enabled
+__attribute__((used)) __attribute__((visibility("default")))
+#       if defined(__cplusplus)
+extern "C"
+#       endif
+double sin_intern(double x)
+{
+	double ans = sin(x);
+	printf("call sin_intern(%f) = %f\n", x, ans);
+	return ans;
+}
+
 int testit(int argc, char **argv)
 {
 	int test_no = -1;
@@ -1361,11 +1350,14 @@ int testit(int argc, char **argv)
 
 	case 52:
 	{
-		for (double x = 0.1; x < 20; x += 0.1) {
-			printf("x %f lgamma %f lgamma.fast %f diff %f\n",
-			       x, gsl_sf_lngamma(x), inla_lgamma_fast(x), gsl_sf_lngamma(x) - inla_lgamma_fast(x));
+		for (double x = -0.5; x < 20; x += 0.1) {
+			printf("x %f lgamma %f lgamma.fast.1 %f diff %f lgamma.fast.2 %f diff %f\n",
+			       x, gsl_sf_lngamma(x),
+			       inla_lgamma_fast1(x),
+			       gsl_sf_lngamma(x) - inla_lgamma_fast1(x),
+			       inla_lgamma_fast2(x),
+			       gsl_sf_lngamma(x) - inla_lgamma_fast2(x));
 		}
-
 	}
 		break;
 
@@ -1400,6 +1392,51 @@ int testit(int argc, char **argv)
 
 	case 55:
 	{
+		// require linking with '-rdynamic'
+		lt_dlhandle handle;
+		typedef double fun_tp(double);
+		fun_tp *fun = NULL;
+		double x = 1.12312;
+
+		lt_dlinit();
+		handle = lt_dlopen(NULL);
+		fun = (fun_tp *) lt_dlsym(handle, "sin_intern");
+		if (!fun)
+			FIXME("sin_intern not found using ltdl");
+#       if defined(_WIN32)
+		if (!fun) {
+			HMODULE hModule = GetModuleHandle(NULL);
+			if (hModule) {
+				fun = (fun_tp *) ((void *) GetProcAddress(hModule, "sin_intern"));
+			}
+		}
+#       endif
+		const char *error = NULL;
+		if (!fun && (error = lt_dlerror()) != NULL) {
+			fprintf(stderr, "%s\n", error);
+			exit(1);
+		}
+		printf("Using sin_intern()\n");
+		P(fun(x));
+
+		fun = (fun_tp *) lt_dlsym(handle, "sin");
+		if (!fun)
+			FIXME("sin not found using ltdl");
+#       if defined(_WIN32)
+		if (!fun) {
+			HMODULE hModule = GetModuleHandle(NULL);
+			if (hModule) {
+				fun = (fun_tp *) ((void *) GetProcAddress(hModule, "sin"));
+			}
+		}
+#       endif
+		if (!fun && (error = lt_dlerror()) != NULL) {
+			fprintf(stderr, "%s\n", error);
+			exit(1);
+		}
+		printf("Using sin()\n");
+		P(fun(x));
+		lt_dlclose(handle);
 	}
 		break;
 
@@ -3036,7 +3073,7 @@ int testit(int argc, char **argv)
 		double rel_err = 0.0;
 		for (int i = 0; i < n; i++) {
 			y[i] = exp(2 * GMRFLib_stdnormal());
-			double ref = gsl_sf_lngamma(y[i]);
+			double ref = LGAMMAfn(y[i]);
 			rel_err += ABS((ref - lgamma(y[i])));
 		}
 		P(rel_err / n);
@@ -3044,7 +3081,7 @@ int testit(int argc, char **argv)
 		tref[0] = -GMRFLib_timer();
 		double sum = 0.0;
 		for (int i = 0; i < n; i++) {
-			sum += gsl_sf_lngamma(y[i]);
+			sum += LGAMMAfn(y[i]);
 		}
 		tref[0] += GMRFLib_timer();
 		P(sum);
@@ -3053,11 +3090,12 @@ int testit(int argc, char **argv)
 		tref[1] = -GMRFLib_timer();
 		for (int i = 0; i < n; i++) {
 			sum += lgamma(y[i]);
+			//sum += gsl_sf_lngamma(y[i]);
 		}
 		tref[1] += GMRFLib_timer();
 		P(sum);
 
-		printf("GSL:  %.4f  libm: %.4f NULL:  %.4f\n", tref[0] / (tref[0] + tref[1] + tref[2]),
+		printf("LGAMMAfn:  %.4f  libm: %.4f NULL:  %.4f\n", tref[0] / (tref[0] + tref[1] + tref[2]),
 		       tref[1] / (tref[0] + tref[1] + tref[2]), tref[2] / (tref[0] + tref[1] + tref[2]));
 
 		P(sum);
@@ -5586,12 +5624,16 @@ int testit(int argc, char **argv)
 		double *x = Calloc(n + 1, double);
 		int *ix = Calloc(n + 1, int);
 
-		double *tref = Calloc(2, double);
+		double tref[3] = {0};
+		double err = 0, ierr = 0;
 		for (int i = 0; i < m; i++) {
-
+			double ref = 0.0;
+			double iref = 0.0;
 			for (int j = 0; j < n; j++) {
 				x[j] = GMRFLib_uniform();
 				ix[j] = (int) (1000 * GMRFLib_uniform());
+				ref += x[j];
+				iref += ix[j];
 			}
 
 			tref[0] -= GMRFLib_timer();
@@ -5599,10 +5641,19 @@ int testit(int argc, char **argv)
 			tref[0] += GMRFLib_timer();
 
 			tref[1] -= GMRFLib_timer();
-			GMRFLib_isum(n, ix);
+			GMRFLib_dsum_ext(n, x);
 			tref[1] += GMRFLib_timer();
+
+			tref[2] -= GMRFLib_timer();
+			GMRFLib_isum(n, ix);
+			tref[2] += GMRFLib_timer();
+
+			err += ABS(GMRFLib_dsum(n, x) - ref);
+			ierr += ABS(GMRFLib_isum(n, ix) - iref);
 		}
-		printf("dsum %f isum %f\n", tref[0], tref[1]);
+		P(err/n);
+		P(ierr/n);
+		printf("dsum %f dsum_ext %f isum %f\n", tref[0], tref[1], tref[2]);
 	}
 		break;
 
@@ -6466,9 +6517,57 @@ int testit(int argc, char **argv)
 	}
 		break;
 
-	case 999:
+	case 205:
 	{
-		GMRFLib_pardiso_check_install(0, 0);
+		int n = 10;
+		GMRFLib_idxval_tp *h = NULL;
+
+		for (int i = 0; i < n; i++) {
+			GMRFLib_idxval_addto(&h, 2 * i + 1, sqrt(i));
+		}
+		GMRFLib_idxval_prepare(&h, 1, 1);
+		GMRFLib_idx_bitmap_tp *bm = GMRFLib_idxval_bitmap_get(h);
+		for (int i = 0 - 10; i < h->idx[n - 1] + 10; i++) {
+			GMRFLib_idxval_tp *v;
+			GMRFLib_idxval_add(&v, i, 0.0);
+			printf("i = %1d in idx: %1d\n", i, GMRFLib_idxval_nmatch(v, bm));
+		}
+	}
+		break;
+
+
+	case 206:
+	{
+		int n = atoi(args[0]);
+		int m = atoi(args[1]);
+		P(n);
+		P(m);
+
+		double tref[2] = { 0 };
+		double z[2] = { 0 };
+		for (int j = 0; j < m; j++) {
+			tref[0] += -GMRFLib_timer();
+			z[0] = 0;
+			for (int i = 0; i < n; i++) {
+				double x = (i + 1) / (double) n * 10;
+				z[0] += MATHLIB_FUN(gammafn) (x);
+			}
+			tref[0] += GMRFLib_timer();
+		}
+		for (int j = 0; j < m; j++) {
+			tref[1] += -GMRFLib_timer();
+			z[1] = 0;
+			for (int i = 0; i < n; i++) {
+				double x = (i + 1) / (double) n * 10;
+				z[1] += tgamma(x);
+			}
+			tref[1] += GMRFLib_timer();
+		}
+		P(z[0]);
+		P(z[1]);
+		P(tref[0]);
+		P(tref[1]);
+		P(tref[0] / (tref[0] + tref[1]));
 	}
 		break;
 
@@ -6480,5 +6579,4 @@ int testit(int argc, char **argv)
 	}
 	exit(EXIT_SUCCESS);
 }
-#       pragma GCC diagnostic pop
 #endif

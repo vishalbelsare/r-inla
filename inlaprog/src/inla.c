@@ -69,6 +69,7 @@
 
 #include "inla.h"
 #include "my.h"
+#include "my-fix.h"
 #include "spde.h"
 #include "spde2.h"
 #include "spde3.h"
@@ -270,7 +271,9 @@ inla_tp *inla_build(const char *dict_filename, int verbose)
 	mb->mode_restart = 1;
 	mb->mode_fixed = mb->mode_use_mode = 0;
 	inla_theta_all_init(mb);			       /* temporary */
-
+	if (!(mb->verbose)) {
+		sTiles_set_log_level(-2);
+	}
 	ini = mb->ini = iniparser_load(dict_filename);
 	if (!ini) {
 		GMRFLib_sprintf(&msg, "Fail to parse ini-file[%s]....", dict_filename);
@@ -532,16 +535,10 @@ inla_tp *inla_build(const char *dict_filename, int verbose)
 		Free(sectype);
 	}
 
-	/*
-	 * type = PARDISO
-	 */
 	for (sec = 0; sec < nsec; sec++) {
 		secname = Strdup(iniparser_getsecname(ini, sec));
 		sectype = Strdup(strupc(iniparser_getstring(ini, inla_string_join((const char *) secname, "TYPE"), NULL)));
 		if (!strcmp(sectype, "PARDISO")) {
-			if (mb->verbose) {
-				printf("\tparse section=[%1d] name=[%s] type=[PARDISO]\n", sec, iniparser_getsecname(ini, sec));
-			}
 			sec_read[sec] = 1;
 			inla_parse_pardiso(mb, ini, sec);
 		}
@@ -757,8 +754,19 @@ inla_tp *inla_build(const char *dict_filename, int verbose)
 	}
 	// iniparser_dump(ini, stdout);
 	if ((count = dictionary_dump_unused(ini, stderr))) {
-		fprintf(stderr, "\n\ninla_build: [%s] contain[%1d] unused entries. PLEASE CHECK\n", dict_filename, count);
-		exit(EXIT_FAILURE);
+		/*
+		 * An entry this binary does not know is almost always a NEWER R package
+		 * writing an option an OLDER binary predates. Exiting made every such
+		 * pairing fatal, so a user who updated the R package but not the binary
+		 * got a failed run instead of a hint. Warn and continue, the same way
+		 * the R side treats an unknown name in control.xxx: report it, drop it,
+		 * carry on. A genuinely malformed Model.ini still fails later, on the
+		 * entry that actually matters.
+		 */
+		fprintf(stderr, "\n\ninla_build: [%s] contain[%1d] unused entries (listed above).\n", dict_filename, count);
+		fprintf(stderr, "\tThis binary does not know them and will IGNORE them.\n");
+		fprintf(stderr, "\tUsually this means the R-package is newer than this binary [%s];\n", __GMRFLib_symbol_to_string(GITCOMMIT));
+		fprintf(stderr, "\tPlease upgrade the binary with 'inla.stiles.install()'\n\n");
 	}
 
 	if (0) {
@@ -5882,7 +5890,7 @@ int inla_INLA_preopt_experimental(inla_tp *mb)
 	for (count = 0, i = 0; i < mb->nf; i++) {
 		if (mb->f_bfunc2[i]) {
 			for (j = 0; j < mb->f_Ntotal[i]; j++) {
-				bfunc[count + j] = Calloc(1, GMRFLib_bfunc_tp);
+				bfunc[count + j] = Malloc(1, GMRFLib_bfunc_tp);
 				bfunc[count + j]->bdef = mb->f_bfunc2[i];
 				bfunc[count + j]->idx = j;
 			}
@@ -5899,7 +5907,7 @@ int inla_INLA_preopt_experimental(inla_tp *mb)
 	for (count = 0, i = 0; i < mb->nf; i++) {
 		if (mb->f_bfunc2[i]) {
 			for (j = 0; j < mb->f_Ntotal[i]; j++) {
-				prior_mean[count + j] = Calloc(1, GMRFLib_prior_mean_tp);
+				prior_mean[count + j] = Malloc(1, GMRFLib_prior_mean_tp);
 				prior_mean[count + j]->bdef = mb->f_bfunc2[i];
 				prior_mean[count + j]->idx = j;
 				prior_mean[count + j]->fixed_mean = 0.0;
@@ -5908,7 +5916,7 @@ int inla_INLA_preopt_experimental(inla_tp *mb)
 		count += mb->f_Ntotal[i];
 	}
 	for (i = 0; i < mb->nlinear; i++) {
-		prior_mean[count] = Calloc(1, GMRFLib_prior_mean_tp);
+		prior_mean[count] = Malloc(1, GMRFLib_prior_mean_tp);
 		prior_mean[count]->bdef = NULL;
 		prior_mean[count]->idx = -1;
 		prior_mean[count]->fixed_mean = mb->linear_mean[i];
@@ -6013,6 +6021,27 @@ int inla_INLA_preopt_experimental(inla_tp *mb)
 				assert(0 == 1);
 			}
 		}
+	}
+
+	// GCPO
+	if (1) {
+		char *gcpo_fixed_nodes = Calloc(N, char);
+		int offset = 0;
+		for (i = 0; i < mb->nf; i++) {
+			int n = mb->f_Ntotal[i];
+			if (n <= 24) {
+				for (j = 0; j < n; j++) {
+					gcpo_fixed_nodes[offset + j] = 1;
+				}
+			}
+			offset += n;
+		}
+		for (i = 0; i < mb->nlinear; i++) {
+			gcpo_fixed_nodes[offset + i] = (char) 1;
+		}
+		offset += mb->nlinear;
+		mb->ai_par->gcpo_fixed_nodes = gcpo_fixed_nodes;
+		assert(offset == N);
 	}
 
 	double tref = GMRFLib_timer();
@@ -6164,12 +6193,10 @@ int inla_INLA_preopt_experimental(inla_tp *mb)
 		size_t nnz = 0;
 		int use_g = 0;
 		GMRFLib_optimize_reorder(preopt->latent_graph, &nnz, &use_g, &(mb->gn));
-		if (GMRFLib_smtp == GMRFLib_SMTP_PARDISO) {
-			GMRFLib_reorder = GMRFLib_REORDER_PARDISO;
-		} else if (GMRFLib_smtp == GMRFLib_SMTP_STILES) {
+		if (GMRFLib_smtp == GMRFLib_SMTP_STILES) {
 			GMRFLib_reorder = GMRFLib_REORDER_STILES;
 		}
-		if (GMRFLib_smtp != GMRFLib_SMTP_PARDISO && GMRFLib_smtp != GMRFLib_SMTP_STILES) {
+		if (GMRFLib_smtp != GMRFLib_SMTP_STILES) {
 			if (mb->verbose) {
 				printf("\tFound optimal reordering=[%s] nnz(L)=[%zu] and use_global_nodes(user)=[%s]\n",
 				       GMRFLib_reorder_name(GMRFLib_reorder), nnz, (use_g ? "yes" : "no"));
@@ -7142,7 +7169,6 @@ int inla_reset(void)
 	// reset static variables various places as need need to call _ai_INLA() twice in preopt_mode
 
 	GMRFLib_opt_exit();
-	GMRFLib_pardiso_exit();
 	R_rgeneric_cputime = 0.0;
 
 	return GMRFLib_SUCCESS;
@@ -7182,6 +7208,7 @@ int main(int argc, char **argv)
 	int host_max_threads = IMAX(omp_get_max_threads(), omp_get_num_procs());
 	int model_n_is_set = 0;
 	int disable_output = 0;
+	int num_p_cores = inla_num_p_cores();
 
 	GMRFLib_numa_init();				       /* must init */
 	GMRFLib_openmp = Calloc(1, GMRFLib_openmp_tp);
@@ -7189,10 +7216,10 @@ int main(int argc, char **argv)
 	GMRFLib_openmp->max_threads2 = host_max_threads * (host_max_threads + 1);	// for cache-indexing
 	GMRFLib_openmp->blas_num_threads_force = 0;
 	GMRFLib_openmp->max_threads_nested = Calloc(3, int);
-	GMRFLib_openmp->max_threads_nested[0] = GMRFLib_openmp->max_threads;
+	GMRFLib_openmp->max_threads_nested[0] = num_p_cores;   // GMRFLib_openmp->max_threads;
 	GMRFLib_openmp->max_threads_nested[1] = 1;
-	GMRFLib_openmp->max_threads_nested[2] = 1;
-	GMRFLib_openmp->adaptive = 0;
+	GMRFLib_openmp->max_threads_nested[2] = (num_p_cores > 1 ? 2 : 1);
+	GMRFLib_openmp->adaptive = (GMRFLib_openmp->max_threads_nested[2] > 1 ? 1 : 0);
 	GMRFLib_openmp->schedule = omp_sched_guided;
 	GMRFLib_openmp->chunk_size = 0;			       /* guided schedule only */
 	GMRFLib_openmp->likelihood_nt = 0;
@@ -7238,7 +7265,7 @@ int main(int argc, char **argv)
 	signal(SIGUSR2, inla_signal);
 	signal(SIGINT, inla_signal);
 #endif
-	while ((opt = getopt(argc, argv, "Ed:vVe:t:B:m:S:z:hsr:R:cpLP:WC")) != -1) {
+	while ((opt = getopt(argc, argv, "Ed:vVe:t:B:m:S:z:hsr:cpLP:QWC")) != -1) {
 		switch (opt) {
 		case 'C':
 		{
@@ -7259,18 +7286,26 @@ int main(int argc, char **argv)
 		case 'E':
 		{
 			GMRFLib_force_stiles = 1;
-			printf("force the use sTiles\n");
 		}
 			break;
 
 		case 'P':
 		{
-			if (!strcasecmp(optarg, "CLASSIC") || !strcasecmp(optarg, "CLASSICAL")) {
-				GMRFLib_inla_mode = GMRFLib_MODE_CLASSIC;
-			} else if (!strcasecmp(optarg, "EXPERIMENTAL") || !strcasecmp(optarg, "COMPACT")) {
-				GMRFLib_inla_mode = GMRFLib_MODE_COMPACT;
-			} else {
-				assert(0 == 1);
+                        if (!strcasecmp(optarg, "CLASSIC") || !strcasecmp(optarg, "CLASSICAL")) {
+                                GMRFLib_inla_mode = GMRFLib_MODE_CLASSIC;
+                        } else if (!strcasecmp(optarg, "EXPERIMENTAL") || !strcasecmp(optarg, "COMPACT")) {
+                                GMRFLib_inla_mode = GMRFLib_MODE_COMPACT;
+                        } else {
+                                assert(0 == 1);
+                        }
+                }
+                        break;
+
+		case 'Q': 
+		{
+			int status = inla_lock_to_p_cores();
+			if (verbose > 0) {
+				printf("\tLock threads to the %1d P-cores [%s]\n", num_p_cores, (status == 0 ? "SUCCESS" : "FAIL"));
 			}
 		}
 			break;
@@ -7342,8 +7377,6 @@ int main(int argc, char **argv)
 				G.mode = INLA_MODE_R;
 			} else if (!strncasecmp(optarg, "FGN", 3)) {
 				G.mode = INLA_MODE_FGN;
-			} else if (!strncasecmp(optarg, "PARDISO", 7)) {
-				G.mode = INLA_MODE_PARDISO;
 			} else if (!strncasecmp(optarg, "OPENMP", 6)) {
 				G.mode = INLA_MODE_OPENMP;
 			} else if (!strncasecmp(optarg, "DRYRUN", 6)) {
@@ -7362,21 +7395,14 @@ int main(int argc, char **argv)
 			// this option is only used for other MODES than INLA, like qsample
 			inla_tolower(optarg);
 			if (!strcasecmp(optarg, "default")) {
-				if (GMRFLib_pardiso_check_install(1, 1) == GMRFLib_SUCCESS ? 1 : 0) {
-					GMRFLib_smtp = GMRFLib_SMTP_PARDISO;
-				} else {
-					GMRFLib_smtp = GMRFLib_SMTP_TAUCS;
-				}
+				GMRFLib_smtp = GMRFLib_SMTP_STILES;
 			} else if (!strcasecmp(optarg, "taucs")) {
 				GMRFLib_smtp = GMRFLib_SMTP_TAUCS;
 			} else if (!strcasecmp(optarg, "band")) {
 				GMRFLib_smtp = GMRFLib_SMTP_BAND;
-			} else if (!strcasecmp(optarg, "stiles")) {
+			} else if (!strcasecmp(optarg, "stiles") || 1) {
 				GMRFLib_smtp = GMRFLib_SMTP_STILES;
 				GMRFLib_openmp->strategy = GMRFLib_OPENMP_STRATEGY_STILES;
-			} else if (!strcasecmp(optarg, "pardiso")) {
-				GMRFLib_smtp = GMRFLib_SMTP_PARDISO;
-				GMRFLib_openmp->strategy = GMRFLib_OPENMP_STRATEGY_PARDISO;
 			}
 			GMRFLib_openmp_implement_strategy(GMRFLib_OPENMP_PLACES_EXTERNAL, NULL, &GMRFLib_smtp);
 		}
@@ -7384,71 +7410,76 @@ int main(int argc, char **argv)
 
 		case 't':
 		{
-			if (inla_sread_colon_ints3(&ntt[0], &ntt[1], &ntt[2], optarg) == INLA_OK ||
-			    inla_sread_colon_ints(&ntt[0], &ntt[1], optarg) == INLA_OK || inla_sread(ntt, 1, optarg, 0) == INLA_OK) {
-
-				if (ntt[0] <= 0) {
-					ntt[0] = GMRFLib_MAX_THREADS();
-				}
-				if (ntt[1] <= 0) {
-					ntt[1] = 1;
-				}
-				if (ntt[2] <= 0) {
-					if (ntt[0] == 1 && ntt[1] == 1) {
-						ntt[2] = 1;
-					} else {
-						ntt[2] = IMIN(ntt[0], 2 * ntt[1]);
+			if (verbose)
+				printf("\tparse num.threads option [%s]\n", optarg);
+			char *s = Strdup(optarg);
+			for (int ii = 0; ii < 3; ii++) {
+				char *token = my_strsep(&s, ":");
+#if !defined(INLA_WITH_MUPARSER)
+				if (token) {
+					char *pP = strchr(token, 'P');
+					char *pC = strchr(token, 'C');
+					if (pP || pC) {
+						fprintf(stderr, "\n");
+						fprintf(stderr, "*** ERROR *** Parse num.threads argument %1d: [%s]\n", ii+1, token);
+						fprintf(stderr, "              No 'muparser'-library in this build, so\n");
+						fprintf(stderr, "              expressions cannot use 'P' or 'C'\n\n"); 
+						exit(1);
 					}
 				}
-				if (verbose > 0) {
-					printf("\tRead ntt %d %d %d with max.threads %d\n", ntt[0], ntt[1], ntt[2], GMRFLib_openmp->max_threads);
-				}
-				GMRFLib_openmp->adaptive = GMRFLib_openmp->max_threads_nested[2] = ntt[2];
+#endif				
+				ntt[ii] = ((token && strlen(token)) ? inla_eval_int_expression(token, num_p_cores, host_max_threads) : 1);
+				ntt[ii] = IMAX(0, ntt[ii]);
+			}
 
-				if (ntt[0] * ntt[1] > GMRFLib_MAX_THREADS()) {
-					fprintf(stderr, "\n\n\tYou ask for %1d x %1d = %1d number of threads,\n", ntt[0], ntt[1], ntt[0] * ntt[1]);
-					fprintf(stderr, "\twhich is more that I got from the system: %1d\n", GMRFLib_MAX_THREADS());
-
-					if (ntt[0] > GMRFLib_MAX_THREADS()) {
-						ntt[0] = GMRFLib_MAX_THREADS();
-						ntt[1] = 1;
-					} else if (ntt[1] > GMRFLib_MAX_THREADS()) {
-						ntt[1] = GMRFLib_MAX_THREADS();
-						ntt[0] = 1;
-					} else {
-						// something gotta give
-						while (ntt[0] * ntt[1] > GMRFLib_MAX_THREADS()) {
-							ntt[1]--;
-						}
-					}
-					GMRFLib_openmp->adaptive = ntt[2] = IMIN(ntt[2], GMRFLib_MAX_THREADS());
-					fprintf(stderr, "\tNumber of threads is reduced to %1d:%1d:%1d\n\n", ntt[0], ntt[1], ntt[2]);
-				}
-
-				for (i = 0; i < 3; i++) {
-					ntt[i] = IMAX(1, ntt[i]);
-					GMRFLib_openmp->max_threads_nested[i] = ntt[i];
-				}
-				GMRFLib_openmp->max_threads = IMIN(GMRFLib_MAX_THREADS(), IMAX(ntt[0] * ntt[1], ntt[2]));
-				GMRFLib_openmp->max_threads2 = GMRFLib_openmp->max_threads2 * (GMRFLib_openmp->max_threads + 1);
-				GMRFLib_openmp->adaptive = IMIN(ntt[2], GMRFLib_MAX_THREADS());
-			} else {
-				fprintf(stderr, "Fail to read A:B[:C] from [%s]\n", optarg);
-				fprintf(stderr, "Will continue with '4:1:2'\n");
-				ntt[0] = 4;
+			if (ntt[0] <= 0) {
+				ntt[0] = GMRFLib_MAX_THREADS();
+			}
+			if (ntt[1] <= 0) {
 				ntt[1] = 1;
-				ntt[2] = 2;
-				for (i = 0; i < 3; i++) {
-					ntt[i] = IMIN(GMRFLib_openmp->max_threads, IMAX(1, ntt[i]));
-					GMRFLib_openmp->max_threads_nested[i] = ntt[i];
+			}
+			if (ntt[2] <= 0) {
+				if (ntt[0] == 1 && ntt[1] == 1) {
+					ntt[2] = 1;
+				} else {
+					ntt[2] = IMIN(ntt[0], 2 * ntt[1]);
 				}
-				GMRFLib_openmp->max_threads = IMIN(host_max_threads, ntt[0] * ntt[1]);
-				GMRFLib_openmp->max_threads2 = GMRFLib_openmp->max_threads2 * (GMRFLib_openmp->max_threads + 1);
-				GMRFLib_openmp->adaptive = GMRFLib_openmp->max_threads_nested[2];
 			}
 			if (verbose > 0) {
-				printf("\tContinue with num.threads = %1d:%1d:%1d max_threads = %1d\n", GMRFLib_openmp->max_threads_nested[0],
-				       GMRFLib_openmp->max_threads_nested[1], GMRFLib_openmp->max_threads_nested[2], GMRFLib_openmp->max_threads);
+				printf("\tRead ntt %d %d %d with max.threads %d\n", ntt[0], ntt[1], ntt[2], GMRFLib_MAX_THREADS());
+			}
+			GMRFLib_openmp->adaptive = GMRFLib_openmp->max_threads_nested[2] = ntt[2];
+
+			if (ntt[0] * ntt[1] > GMRFLib_MAX_THREADS()) {
+				fprintf(stderr, "\n\n\tYou ask for %1d x %1d = %1d number of threads,\n", ntt[0], ntt[1], ntt[0] * ntt[1]);
+				fprintf(stderr, "\twhich is more that I got from the system: %1d\n", GMRFLib_MAX_THREADS());
+
+				if (ntt[0] > GMRFLib_MAX_THREADS()) {
+					ntt[0] = GMRFLib_MAX_THREADS();
+					ntt[1] = 1;
+				} else if (ntt[1] > GMRFLib_MAX_THREADS()) {
+					ntt[1] = GMRFLib_MAX_THREADS();
+					ntt[0] = 1;
+				} else {
+					while (ntt[0] * ntt[1] > GMRFLib_MAX_THREADS()) {
+						ntt[1]--;
+					}
+				}
+				GMRFLib_openmp->adaptive = ntt[2] = IMIN(ntt[2], GMRFLib_MAX_THREADS());
+				fprintf(stderr, "\tNumber of threads is reduced to %1d:%1d:%1d\n\n", ntt[0], ntt[1], ntt[2]);
+			}
+
+			for (i = 0; i < 3; i++) {
+				ntt[i] = IMAX(1, ntt[i]);
+				GMRFLib_openmp->max_threads_nested[i] = ntt[i];
+			}
+			GMRFLib_openmp->max_threads = IMIN(GMRFLib_MAX_THREADS(), IMAX(ntt[0] * ntt[1], ntt[2]));
+			GMRFLib_openmp->max_threads2 = GMRFLib_openmp->max_threads2 * (GMRFLib_openmp->max_threads + 1);
+			GMRFLib_openmp->adaptive = IMIN(ntt[2], GMRFLib_MAX_THREADS());
+			if (verbose > 0) {
+				printf("\tContinue with num.threads=%1d:%1d:%1d max_threads=%1d P=%1d C=%1d\n",
+				       GMRFLib_openmp->max_threads_nested[0], GMRFLib_openmp->max_threads_nested[1],
+				       GMRFLib_openmp->max_threads_nested[2], GMRFLib_openmp->max_threads, num_p_cores, host_max_threads);
 			}
 			omp_set_num_threads(GMRFLib_MAX_THREADS());
 			GMRFLib_openmp_implement_strategy(GMRFLib_OPENMP_PLACES_DEFAULT, NULL, NULL);
@@ -7503,18 +7534,6 @@ int main(int argc, char **argv)
 				G.reorder = (GMRFLib_reorder_tp) itmp;
 			}
 			GMRFLib_reorder = G.reorder;	       /* yes! */
-		}
-			break;
-
-		case 'R':
-		{
-			int nrhs = 0;
-			err = inla_sread_ints(&nrhs, 1, optarg);
-			if (err || nrhs < 0) {
-				GMRFLib_ASSERT(err, GMRFLib_EPARAMETER);
-				exit(1);
-			}
-			GMRFLib_pardiso_set_nrhs(nrhs);
 		}
 			break;
 
@@ -7638,13 +7657,6 @@ int main(int argc, char **argv)
 	}
 		break;
 
-	case INLA_MODE_PARDISO:
-	{
-		inla_check_pardiso();
-		exit(EXIT_SUCCESS);
-	}
-		break;
-
 	case INLA_MODE_TESTIT:
 	{
 		if (GMRFLib_smtp == GMRFLib_SMTP_STILES) {
@@ -7665,20 +7677,22 @@ int main(int argc, char **argv)
 	}
 
 	if (!silent || verbose) {
-		fprintf(stdout, "\nVersion.......[%s]\n", __GMRFLib_symbol_to_string(GITCOMMIT));
+		fprintf(stdout, "\nVersion....... [%s]\n", __GMRFLib_symbol_to_string(GITCOMMIT));
 #if defined(__linux__)
 		char *val = getenv("LD_PRELOAD");
-		fprintf(stdout, "PRELOAD.......[%s]\n", (val ? val : "(none)"));
+		fprintf(stdout, "PRELOAD....... [%s]\n", (val ? val : "(none)"));
 #endif
 #if defined(__APPLE__)
 		char *val = getenv("DYLD_INSERT_LIBRARIES");
-		fprintf(stdout, "PRELOAD.......[%s]\n", (val ? val : "(none)"));
+		fprintf(stdout, "PRELOAD....... [%s]\n", (val ? val : "(none)"));
 #endif
 #if !defined(INLA_WITH_DEVEL)
-		fprintf(stdout, "Build-time....[%s %s]\n", __DATE__, __TIME__);
+		fprintf(stdout, "Build-time.... [%s %s]\n", __DATE__, __TIME__);
 #endif
-		fprintf(stdout, "MAX_THREADS...[%1d]\n", GMRFLib_MAX_THREADS());
-
+		fprintf(stdout, "#cores........ [%1d]\n", host_max_threads);
+		fprintf(stdout, "#P-cores...... [%1d]\n", num_p_cores);
+		fprintf(stdout, "num.threads... [%1d:%1d:%1d]\n",
+			GMRFLib_openmp->max_threads_nested[0], GMRFLib_openmp->max_threads_nested[1], GMRFLib_openmp->max_threads_nested[2]);
 		_BUGS_intern(stdout);
 	}
 

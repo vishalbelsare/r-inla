@@ -1,3 +1,6 @@
+#define gsl_sf_lnbeta(a_, b_) LBETAfn(a_, b_)
+#define my_gsl_sf_lnbeta(a_, b_) LBETAfn(a_, b_)
+
 double inla_compute_saturated_loglik(int thread_id, int *lcache_idx, int idx, GMRFLib_logl_tp *UNUSED(loglfunc), double *x_vec, void *arg)
 {
 	inla_tp *a = (inla_tp *) arg;
@@ -1220,8 +1223,8 @@ int loglikelihood_exppower(int thread_id, int *lcache_idx, double *__restrict lo
 
 	lcache_t *lc = llcache[cache_idx_numa];
 	if (lc->beta != beta) {
-		lc->lgamma1 = my_gsl_sf_lngamma(1.0 / beta);
-		lc->lgamma3 = my_gsl_sf_lngamma(3.0 / beta);
+		lc->lgamma1 = LGAMMAfn(1.0 / beta);
+		lc->lgamma3 = LGAMMAfn(3.0 / beta);
 		lc->beta = beta;
 	}
 	double alpha = sigma * exp(0.5 * (lc->lgamma1 - lc->lgamma3));
@@ -1322,7 +1325,7 @@ int loglikelihood_gaussianjw(int thread_id, int *UNUSED(lcache_idx), double *__r
 	double beta_2 = ds->data_observations.gjw_beta[2][thread_id][0];
 
 	if (G_norm_const_compute[idx]) {
-		G_norm_const[idx] = LOG_NORMC_GAUSSIAN - df2 * M_LN2 - gsl_sf_lngamma(df2);
+		G_norm_const[idx] = LOG_NORMC_GAUSSIAN - df2 * M_LN2 - LGAMMAfn(df2);
 		G_norm_const_compute[idx] = 0;
 	}
 	double normc = G_norm_const[idx];
@@ -1887,8 +1890,8 @@ int loglikelihood_stochvol_t(int thread_id, int *UNUSED(lcache_idx), double *__r
 	LINK_INIT;
 	if (m > 0) {
 		double lg1, lg2, f;
-		lg1 = gsl_sf_lngamma(dof / 2.0);
-		lg2 = gsl_sf_lngamma((dof + 1.0) / 2.0);
+		lg1 = LGAMMAfn(dof / 2.0);
+		lg2 = LGAMMAfn((dof + 1.0) / 2.0);
 		for (i = 0; i < m; i++) {
 			var_u = PREDICTOR_INVERSE_LINK(x[i], off);
 			f = sqrt(var_u) / sd;
@@ -1968,7 +1971,7 @@ int loglikelihood_iid_gamma(int thread_id, int *UNUSED(lcache_idx), double *__re
 	w = ds->data_observations.iid_gamma_scale[idx];
 	shape = map_exp_forward(ds->data_observations.iid_gamma_log_shape[thread_id][0], MAP_FORWARD, NULL);
 	rate = map_exp_forward(ds->data_observations.iid_gamma_log_rate[thread_id][0], MAP_FORWARD, NULL) * w;
-	cons = -shape * log(rate) - gsl_sf_lngamma(shape);
+	cons = -shape * log(rate) - LGAMMAfn(shape);
 
 	if (m > 0) {
 		for (i = 0; i < m; i++) {
@@ -2005,7 +2008,7 @@ int loglikelihood_iid_logitbeta(int thread_id, int *UNUSED(lcache_idx), double *
 	LINK_INIT;
 	a = map_exp_forward(ds->data_observations.iid_logitbeta_log_a[thread_id][0], MAP_FORWARD, NULL);
 	b = map_exp_forward(ds->data_observations.iid_logitbeta_log_b[thread_id][0], MAP_FORWARD, NULL);
-	cons = gsl_sf_lngamma(a + b) - (gsl_sf_lngamma(a) + gsl_sf_lngamma(b));
+	cons = LGAMMAfn(a + b) - (LGAMMAfn(a) + LGAMMAfn(b));
 
 	if (m > 0) {
 		for (i = 0; i < m; i++) {
@@ -2035,7 +2038,7 @@ int loglikelihood_loggamma_frailty(int thread_id, int *UNUSED(lcache_idx), doubl
 	// LINK_INIT;
 	lprec = ds->data_observations.log_prec_loggamma_frailty[thread_id][0];
 	prec = map_precision_forward(lprec, MAP_FORWARD, NULL);
-	log_gamma = gsl_sf_lngamma(prec);
+	log_gamma = LGAMMAfn(prec);
 
 	if (m > 0) {
 		for (i = 0; i < m; i++) {
@@ -2517,8 +2520,8 @@ int loglikelihood_t(int thread_id, int *UNUSED(lcache_idx), double *__restrict l
 	prec = exp(ds->data_observations.log_prec_t[thread_id][0]) * w;
 	fac = sqrt((dof / (dof - 2.0)) * prec);
 
-	double lg1 = gsl_sf_lngamma(dof / 2.0);
-	double lg2 = gsl_sf_lngamma((dof + 1.0) / 2.0);
+	double lg1 = LGAMMAfn(dof / 2.0);
+	double lg2 = LGAMMAfn((dof + 1.0) / 2.0);
 	if (m > 0) {
 		double c1 = lg2 - lg1 - 0.5 * log(M_PI * dof) + log(fac);
 		double c2 = (dof + 1.0) / 2.0;
@@ -2561,8 +2564,8 @@ int loglikelihood_tstrata(int thread_id, int *UNUSED(lcache_idx), double *__rest
 	prec = exp(ds->data_observations.log_prec_tstrata[strata][thread_id][0]) * w;
 	fac = sqrt((dof / (dof - 2.0)) * prec);
 
-	double lg1 = gsl_sf_lngamma(dof / 2.0);
-	double lg2 = gsl_sf_lngamma((dof + 1.0) / 2.0);
+	double lg1 = LGAMMAfn(dof / 2.0);
+	double lg2 = LGAMMAfn((dof + 1.0) / 2.0);
 	if (m > 0) {
 		double c1 = lg2 - lg1 - 0.5 * log(M_PI * dof) + log(fac);
 		double c2 = (dof + 1.0) / 2.0;
@@ -3306,7 +3309,7 @@ int loglikelihood_0nbinomial(int thread_id, int *UNUSED(lcache_idx), double *__r
 
 	if (m > 0) {
 		if (y > 0.0) {
-			double lnorm = -normc + gsl_sf_lngamma(y + size) - gsl_sf_lngamma(size);
+			double lnorm = -normc + LGAMMAfn(y + size) - LGAMMAfn(size);
 			for (int i = 0; i < m; i++) {
 				double lambda = PREDICTOR_INVERSE_LINK(x[i], off);
 				double mu = E * lambda;
@@ -3368,7 +3371,7 @@ int loglikelihood_0nbinomialS(int thread_id, int *UNUSED(lcache_idx), double *__
 		double p = size / (size + mu);
 		double logl = size * LOG_p(p) + y * LOG_1mp(p);
 		if (y > 0.0) {
-			logl += -normc + gsl_sf_lngamma(y + size) - gsl_sf_lngamma(size);
+			logl += -normc + LGAMMAfn(y + size) - LGAMMAfn(size);
 			for (int i = 0; i < m; i++) {
 				double prob = PREDICTOR_INVERSE_LINK(x[i], off);
 				logll[i] = logl + LOG_1mp(prob);
@@ -3948,7 +3951,7 @@ int loglikelihood_contpoisson(int thread_id, int *UNUSED(lcache_idx), double *__
 		GMRFLib_ASSERT(y_cdf == NULL, GMRFLib_ESNH);
 
 		// slight inconsistency, as we use the 'exact' expression here, and an (good) approximation above.
-		double normc = exp(gsl_sf_lngamma(y + 1.0));
+		double normc = exp(LGAMMAfn(y + 1.0));
 		for (i = 0; i < -m; i++) {
 			lambda = E * PREDICTOR_INVERSE_LINK(x[i], off);
 			logll[i] = gsl_sf_gamma_inc(y + 1.0, lambda) / normc;
@@ -3988,7 +3991,7 @@ int loglikelihood_qcontpoisson(int thread_id, int *UNUSED(lcache_idx), double *_
 		GMRFLib_ASSERT(y_cdf == NULL, GMRFLib_ESNH);
 
 		// slight inconsistency, as we use the 'exact' expression here, and an (good) approximation above.
-		double normc = exp(gsl_sf_lngamma(y + 1.0));
+		double normc = exp(LGAMMAfn(y + 1.0));
 		for (i = 0; i < -m; i++) {
 			q = PREDICTOR_INVERSE_LINK(x[i], off);
 			lambda = E * exp(GMRFLib_spline_eval(log(q), ds->data_observations.qcontpoisson_func[id]));
@@ -4818,7 +4821,7 @@ int loglikelihood_negative_binomial(int thread_id, int *UNUSED(lcache_idx), doub
 
 				t[0] = -GMRFLib_timer();
 				for (int time = 0; time < ntimes; time++) {
-					tmp0 += gsl_sf_lngamma(yy + s[time]) - gsl_sf_lngamma(s[time]);
+					tmp0 += LGAMMAfn(yy + s[time]) - LGAMMAfn(s[time]);
 				}
 				t[0] += GMRFLib_timer();
 
@@ -4852,7 +4855,7 @@ int loglikelihood_negative_binomial(int thread_id, int *UNUSED(lcache_idx), doub
 		// the expression lgamma(y+s)-lgamm(s) reduces using Gamma(1+z)=z*Gamma(z)
 		double lnorm = -normc;
 		if (y >= ylim) {
-			lnorm += gsl_sf_lngamma(y + size) - gsl_sf_lngamma(size);
+			lnorm += LGAMMAfn(y + size) - LGAMMAfn(size);
 		} else {
 #pragma omp simd reduction(+: lnorm)
 			for (int yy = 0; yy < (int) y; yy++) {
@@ -4974,7 +4977,7 @@ int loglikelihood_negative_binomial_cen2(int thread_id, int *UNUSED(lcache_idx),
 
 	LINK_INIT;
 	if (m > 0) {
-		double lnorm = gsl_sf_lngamma(y + size) - gsl_sf_lngamma(size) - gsl_sf_lngamma(y + 1.0);
+		double lnorm = LGAMMAfn(y + size) - LGAMMAfn(size) - LGAMMAfn(y + 1.0);
 		if ((y >= int_low && int_low >= 0) && (int_high < 0 || y <= int_high)) {
 			for (int i = 0; i < m; i++) {
 				double lambda = PREDICTOR_INVERSE_LINK(x[i], off);
@@ -5034,7 +5037,7 @@ int loglikelihood_zeroinflated_negative_binomial0(int thread_id, int *UNUSED(lca
 			/*
 			 * this is constant for the NegativeBinomial 
 			 */
-			lnorm = gsl_sf_lngamma(y + size) - gsl_sf_lngamma(size) - gsl_sf_lnfact((int) y);
+			lnorm = LGAMMAfn(y + size) - LGAMMAfn(size) - gsl_sf_lnfact((int) y);
 
 			for (i = 0; i < m; i++) {
 				lambda = PREDICTOR_INVERSE_LINK(x[i], off);
@@ -5112,7 +5115,7 @@ int loglikelihood_zeroinflated_negative_binomial1(int thread_id, int *UNUSED(lca
 		/*
 		 * this is constant for the NegativeBinomial 
 		 */
-		lnorm = gsl_sf_lngamma(y + size) - gsl_sf_lngamma(size) - gsl_sf_lngamma(y + 1.0);
+		lnorm = LGAMMAfn(y + size) - LGAMMAfn(size) - LGAMMAfn(y + 1.0);
 
 		if ((int) y == 0) {
 			for (i = 0; i < m; i++) {
@@ -5202,7 +5205,7 @@ int loglikelihood_zeroinflated_negative_binomial1_strata2(int thread_id, int *UN
 		/*
 		 * this is constant for the NegativeBinomial 
 		 */
-		lnorm = gsl_sf_lngamma(y + size) - gsl_sf_lngamma(size) - gsl_sf_lngamma(y + 1.0);
+		lnorm = LGAMMAfn(y + size) - LGAMMAfn(size) - LGAMMAfn(y + 1.0);
 
 		if ((int) y == 0) {
 			for (i = 0; i < m; i++) {
@@ -5293,7 +5296,7 @@ int loglikelihood_zeroinflated_negative_binomial1_strata3(int thread_id, int *UN
 		/*
 		 * this is constant for the NegativeBinomial 
 		 */
-		lnorm = gsl_sf_lngamma(y + size) - gsl_sf_lngamma(size) - gsl_sf_lngamma(y + 1.0);
+		lnorm = LGAMMAfn(y + size) - LGAMMAfn(size) - LGAMMAfn(y + 1.0);
 
 		if ((int) y == 0) {
 			for (i = 0; i < m; i++) {
@@ -5383,7 +5386,7 @@ int loglikelihood_zeroinflated_negative_binomial2(int thread_id, int *UNUSED(lca
 		/*
 		 * this is constant for the NegativeBinomial 
 		 */
-		lnorm = gsl_sf_lngamma(y + size) - gsl_sf_lngamma(size) - gsl_sf_lngamma(y + 1.0);
+		lnorm = LGAMMAfn(y + size) - LGAMMAfn(size) - LGAMMAfn(y + 1.0);
 
 		if ((int) y == 0) {
 			for (i = 0; i < m; i++) {
@@ -5982,7 +5985,7 @@ int loglikelihood_nmixnb(int thread_id, int *UNUSED(lcache_idx), double *__restr
 			ny++;
 			n = IMAX(n, ds->data_observations.nmix_y[i][idx]);
 		}
-		normc_nb = gsl_sf_lngamma(n + size) - gsl_sf_lngamma(size) - my_gsl_sf_lnfact(n);
+		normc_nb = LGAMMAfn(n + size) - LGAMMAfn(size) - my_gsl_sf_lnfact(n);
 
 		if (ny > ncy[id]) {
 			ncy[id] = ny;
@@ -6300,9 +6303,9 @@ int loglikelihood_mix_gaussian(int thread_id, int *lcache_idx, double *__restric
 __attribute__((target_clones(INLA_CLONE_TARGETS "default")))
 int loglikelihood_mix_core(int thread_id, int *lcache_idx, double *__restrict logll, double *__restrict x, int m, int idx, double *x_vec,
 			   double *y_cdf, void *arg, int (*func_quadrature)(int, int *, double **, double **, int *, void *arg),
-			   int(*func_simpson)(int, int *, double **, double **, int *, void *arg))
+			   int (*func_simpson)(int, int *, double **, double **, int *, void *arg))
 {
-	Data_section_tp *ds =(Data_section_tp *) arg;
+	Data_section_tp *ds = (Data_section_tp *) arg;
 	if (m == 0) {
 		if (arg) {
 			return (ds->mix_loglikelihood(thread_id, lcache_idx, NULL, NULL, 0, 0, NULL, NULL, arg));
@@ -6831,7 +6834,7 @@ int loglikelihood_gamma(int thread_id, int *UNUSED(lcache_idx), double *__restri
 	double s = (ds->data_observations.gamma_scale ? ds->data_observations.gamma_scale[idx] : 1.0);
 	double phi_param = map_exp_forward(ds->data_observations.gamma_log_prec[thread_id][0], MAP_FORWARD, NULL);
 	double phi = phi_param * s;
-	double c = -gsl_sf_lngamma(phi) + (phi - 1.0) * log(y) + phi * log(phi);
+	double c = -LGAMMAfn(phi) + (phi - 1.0) * log(y) + phi * log(phi);
 
 	LINK_INIT;
 	if (m > 0) {
@@ -6870,7 +6873,7 @@ int loglikelihood_mgamma(int thread_id, int *UNUSED(lcache_idx), double *__restr
 	double phi_param = map_exp_forward(ds->data_observations.gamma_log_prec[thread_id][0], MAP_FORWARD, NULL);
 	double phi = phi_param * s;
 	double delta = 0.5 * (sqrt(phi * (phi + 4.0)) + phi);
-	double c = delta * log(y) - gsl_sf_lngamma(delta + 1.0);
+	double c = delta * log(y) - LGAMMAfn(delta + 1.0);
 
 	LINK_INIT;
 
@@ -6932,7 +6935,7 @@ int loglikelihood_gammasv(int thread_id, int *UNUSED(lcache_idx), double *__rest
 		for (int i = 0; i < m; i++) {
 			double mu = PREDICTOR_INVERSE_LINK(x[i], off);
 			double a = phi * mu;
-			logll[i] = -gsl_sf_lngamma(a) + a * lb + (a - 1.0) * ly - b * y;
+			logll[i] = -LGAMMAfn(a) + a * lb + (a - 1.0) * ly - b * y;
 		}
 	} else {
 		double yy = (y_cdf ? *y_cdf : y);
@@ -6970,7 +6973,7 @@ int loglikelihood_gammajw(int thread_id, int *UNUSED(lcache_idx), double *__rest
 	if (m > 0) {
 		for (i = 0; i < m; i++) {
 			mu = PREDICTOR_INVERSE_LINK(x[i], off);
-			logll[i] = -gsl_sf_lngamma(mu) + (mu - 1.0) * ly - y;
+			logll[i] = -LGAMMAfn(mu) + (mu - 1.0) * ly - y;
 		}
 	} else {
 		double yy = (y_cdf ? *y_cdf : y);
@@ -7311,38 +7314,96 @@ int loglikelihood_beta(int thread_id, int *UNUSED(lcache_idx), double *__restric
 		double l1my = LOG_1mp(y);
 
 		if (no_censoring) {
-			for (i = 0; i < m; i++) {
-				mu = PREDICTOR_INVERSE_LINK(x[i], off);
-				a = mu * phi;
-				b = -mu * phi + phi;
-				// If y is close to 0 then 'b' is tiny. Use the asymptotic expansion from `asympt(log(Beta(a,1/bb)), bb, 1)'. If y
-				// is
-				// close to 1 then 'a' is tiny, do similarly
-				if (DMIN(a, b) < INLA_REAL_SMALL) {
-					llbeta = -log(DMIN(a, b));
-				} else {
-					llbeta = MATHLIB_FUN(lbeta) (a, b);
+			if (0) {
+				for (i = 0; i < m; i++) {
+					mu = PREDICTOR_INVERSE_LINK(x[i], off);
+					a = mu * phi;
+					b = -mu * phi + phi;
+					// If y is close to 0 then 'b' is tiny. Use the asymptotic expansion from `asympt(log(Beta(a,1/bb)), bb,
+					// 1)'. If y
+					// is
+					// close to 1 then 'a' is tiny, do similarly
+					if (DMIN(a, b) < INLA_REAL_SMALL) {
+						llbeta = -log(DMIN(a, b));
+					} else {
+						llbeta = inla_lbeta(a, b);
+					}
+					logll[i] = -llbeta + (a - 1.0) * ly + (b - 1.0) * l1my;
 				}
-
-				logll[i] = -llbeta + (a - 1.0) * ly + (b - 1.0) * l1my;
+			} else {
+				double va[m], vb[m], vllbeta[m];
+				for (i = 0; i < m; i++) {
+					mu = PREDICTOR_INVERSE_LINK(x[i], off);
+					va[i] = mu * phi;
+					vb[i] = -mu * phi + phi;
+				}
+				inla_lbeta_m((size_t) m, va, vb, vllbeta);
+				for (i = 0; i < m; i++) {
+					a = va[i];
+					b = vb[i];
+					if (DMIN(a, b) < INLA_REAL_SMALL) {
+						llbeta = -log(DMIN(a, b));
+					} else {
+						llbeta = vllbeta[i];
+					}
+					logll[i] = -llbeta + (a - 1.0) * ly + (b - 1.0) * l1my;
+				}
 			}
 		} else {
-			for (i = 0; i < m; i++) {
-				mu = PREDICTOR_INVERSE_LINK(x[i], off);
-				a = mu * phi;
-				b = -mu * phi + phi;
-				if (DMIN(a, b) < INLA_REAL_SMALL) {
-					llbeta = -log(DMIN(a, b));
-				} else {
-					llbeta = MATHLIB_FUN(lbeta) (a, b);
-				}
+			if (0) {
+				// old code
+				for (i = 0; i < m; i++) {
+					mu = PREDICTOR_INVERSE_LINK(x[i], off);
+					a = mu * phi;
+					b = -mu * phi + phi;
+					if (DMIN(a, b) < INLA_REAL_SMALL) {
+						llbeta = -log(DMIN(a, b));
+					} else {
+						llbeta = inla_lbeta(a, b);
+					}
 
+					if (y <= censor_value) {
+						logll[i] = MATHLIB_FUN(pbeta) (censor_value, a, b, 1, 1);
+					} else if (y < 1.0 - censor_value) {
+						logll[i] = -llbeta + (a - 1.0) * ly + (b - 1.0) * l1my;
+					} else {
+						logll[i] = MATHLIB_FUN(pbeta) (1.0 - censor_value, a, b, 0, 1);
+					}
+				}
+			} else {
+				// split code and do all lbeta calculations upfront.
+				// we only need the lbeta for the uncensored case
+				double va[m], vb[m];
+				for (i = 0; i < m; i++) {
+					mu = PREDICTOR_INVERSE_LINK(x[i], off);
+					va[i] = mu * phi;
+					vb[i] = -mu * phi + phi;
+				}
 				if (y <= censor_value) {
-					logll[i] = MATHLIB_FUN(pbeta) (censor_value, a, b, 1, 1);
-				} else if (y < 1.0 - censor_value) {
-					logll[i] = -llbeta + (a - 1.0) * ly + (b - 1.0) * l1my;
+					for (i = 0; i < m; i++) {
+						a = va[i];
+						b = vb[i];
+						logll[i] = MATHLIB_FUN(pbeta) (censor_value, a, b, 1, 1);
+					}
+				} else if (y >= 1.0 - censor_value) {
+					for (i = 0; i < m; i++) {
+						a = va[i];
+						b = vb[i];
+						logll[i] = MATHLIB_FUN(pbeta) (1.0 - censor_value, a, b, 0, 1);
+					}
 				} else {
-					logll[i] = MATHLIB_FUN(pbeta) (1.0 - censor_value, a, b, 0, 1);
+					double vllbeta[m];
+					inla_lbeta_m((size_t) m, va, vb, vllbeta);
+					for (i = 0; i < m; i++) {
+						a = va[i];
+						b = vb[i];
+						if (DMIN(a, b) < INLA_REAL_SMALL) {
+							llbeta = -log(DMIN(a, b));
+						} else {
+							llbeta = vllbeta[i];
+						}
+						logll[i] = -llbeta + (a - 1.0) * ly + (b - 1.0) * l1my;
+					}
 				}
 			}
 		}
@@ -7407,35 +7468,35 @@ int loglikelihood_obeta(int thread_id, int *UNUSED(lcache_idx), double *__restri
 		} else {
 			double ly = LOG_p(y);
 			double l1my = LOG_1mp(y);
-			for (int i = 0; i < m; i++) {
-				// need to protect it, as otherwise it can go nuts
-				double mu = PREDICTOR_INVERSE_LINK(x[i], off);
-				double low = PREDICTOR_INVERSE_LINK(x[i] - k1, off);
-				double high = PREDICTOR_INVERSE_LINK(x[i] - k2, off);
-				double diff = DMAX(FLT_EPSILON, low - high);
-				double a = DMAX(FLT_EPSILON, mu * phi);
-				double b = DMAX(FLT_EPSILON, -mu * phi + phi);
-				double llbeta = ((DMIN(a, b) <= FLT_EPSILON) ? -log(DMIN(a, b)) : MATHLIB_FUN(lbeta) (a, b));
-				logll[i] = log(diff) - llbeta + (a - 1.0) * ly + (b - 1.0) * l1my;
-#if 0
-				if (ISNAN(logll[i]) || ISINF(logll[i])) {
-					P(i);
-					P(k1);
-					P(k2);
-					P(phi);
-					P(x[i]);
-					P(logll[i]);
-					P(ly);
-					P(l1my);
-					P(mu);
-					P(low);
-					P(high);
-					P(low - high);
-					P(a);
-					P(b);
-					P(llbeta);
+			if (0) {
+				for (int i = 0; i < m; i++) {
+					// need to protect it, as otherwise it can go nuts
+					double mu = PREDICTOR_INVERSE_LINK(x[i], off);
+					double low = PREDICTOR_INVERSE_LINK(x[i] - k1, off);
+					double high = PREDICTOR_INVERSE_LINK(x[i] - k2, off);
+					double diff = DMAX(FLT_EPSILON, low - high);
+					double a = DMAX(FLT_EPSILON, mu * phi);
+					double b = DMAX(FLT_EPSILON, -mu * phi + phi);
+					double llbeta = ((DMIN(a, b) <= FLT_EPSILON) ? -log(DMIN(a, b)) : inla_lbeta(a, b));
+					logll[i] = log(diff) - llbeta + (a - 1.0) * ly + (b - 1.0) * l1my;
 				}
-#endif
+			} else {
+				// we group the lbeta-calculations which is faster
+				double a[m], b[m], llbeta[m], diff[m];
+				for (int i = 0; i < m; i++) {
+					double mu = PREDICTOR_INVERSE_LINK(x[i], off);
+					double low = PREDICTOR_INVERSE_LINK(x[i] - k1, off);
+					double high = PREDICTOR_INVERSE_LINK(x[i] - k2, off);
+					diff[i] = DMAX(FLT_EPSILON, low - high);
+					a[i] = DMAX(FLT_EPSILON, mu * phi);
+					b[i] = DMAX(FLT_EPSILON, -mu * phi + phi);
+				}
+				inla_lbeta_m((size_t) m, a, b, llbeta);
+				for (int i = 0; i < m; i++) {
+					// need to do exactly the same
+					double llbeta_local = ((DMIN(a[i], b[i]) <= FLT_EPSILON) ? -log(DMIN(a[i], b[i])) : llbeta[i]);
+					logll[i] = log(diff[i]) - llbeta_local + (a[i] - 1.0) * ly + (b[i] - 1.0) * l1my;
+				}
 			}
 		}
 	} else {
@@ -7486,7 +7547,6 @@ int loglikelihood_betabinomial(int thread_id, int *UNUSED(lcache_idx), double *_
 	int n = d->nb;
 
 	double rho = map_probability_forward(ds->data_observations.betabinomial_overdispersion_intern[thread_id][0], MAP_FORWARD, NULL);
-	double p, a, b;
 	double normc;
 
 	if (ISNAN(d->normc)) {
@@ -7500,15 +7560,35 @@ int loglikelihood_betabinomial(int thread_id, int *UNUSED(lcache_idx), double *_
 		int len_work = my_betabinomial_work_len(n);
 		double work[len_work];
 		double p_upper = 0.999;
-		double xmax = GMRFLib_max_value(x, m, NULL) + off;
-		p = PREDICTOR_INVERSE_LINK(xmax, off);
-		if (p < p_upper) {
-			for (int i = 0; i < m; i++) {
-				p = PREDICTOR_INVERSE_LINK(x[i], off);
-				a = p * (1.0 - rho) / rho;
-				b = (p * rho - p - rho + 1.0) / rho;
-				// logll[i] = normc + gsl_sf_lnbeta(y + a, n - y + b) - gsl_sf_lnbeta(a, b);
-				logll[i] = normc + my_betabinomial(y, n, a, b, work, large);
+		double xmax = GMRFLib_max_value(x, m, NULL);
+		double pp = PREDICTOR_INVERSE_LINK(xmax, off);
+		if (pp < p_upper) {
+			if (0) {
+				for (int i = 0; i < m; i++) {
+					double p = PREDICTOR_INVERSE_LINK(x[i], off);
+					double a = p * (1.0 - rho) / rho;
+					double b = (p * rho - p - rho + 1.0) / rho;
+					// logll[i] = normc + gsl_sf_lnbeta(y + a, n - y + b) - gsl_sf_lnbeta(a, b);
+					logll[i] = normc + my_betabinomial(y, n, a, b, work, large);
+				}
+			} else {
+				// extract all lbeta() to evaluated, and evaluate them jointly
+				double va[2 * m], vb[2 * m], vlbeta[2 * m];
+				for (int i = 0; i < m; i++) {
+					double p = PREDICTOR_INVERSE_LINK(x[i], off);
+					double a = p * (1.0 - rho) / rho;
+					double b = (p * rho - p - rho + 1.0) / rho;
+					// gsl_sf_lnbeta(y + a, n - y + b)
+					va[i] = y + a;
+					vb[i] = n - y + b;
+					// gsl_sf_lnbeta(a, b);
+					va[m + i] = a;
+					vb[m + i] = b;
+				}
+				inla_lbeta_m(2 * m, va, vb, vlbeta);
+				for (int i = 0; i < m; i++) {
+					logll[i] = normc + vlbeta[i] - vlbeta[m + i];
+				}
 			}
 		} else {
 			// extrapolate linearly
@@ -7517,9 +7597,9 @@ int loglikelihood_betabinomial(int thread_id, int *UNUSED(lcache_idx), double *_
 			xx[0] = xx[1] - h;
 			xx[2] = xx[1] + h;
 			for (int i = 0; i < 3; i++) {
-				p = PREDICTOR_INVERSE_LINK(xx[i], off);
-				a = p * (1.0 - rho) / rho;
-				b = (p * rho - p - rho + 1.0) / rho;
+				double p = PREDICTOR_INVERSE_LINK(xx[i], off);
+				double a = p * (1.0 - rho) / rho;
+				double b = (p * rho - p - rho + 1.0) / rho;
 				ll[i] = normc + my_betabinomial(y, n, a, b, work, large);
 			}
 			diff = (ll[2] - ll[0]) / (2.0 * h);
@@ -7548,10 +7628,9 @@ int loglikelihood_betabinomial(int thread_id, int *UNUSED(lcache_idx), double *_
 			}
 
 			double normc2;
-
-			p = PREDICTOR_INVERSE_LINK(x[i], off);
-			a = p * (1.0 - rho) / rho;
-			b = (p * rho - p - rho + 1.0) / rho;
+			double p = PREDICTOR_INVERSE_LINK(x[i], off);
+			double a = p * (1.0 - rho) / rho;
+			double b = (p * rho - p - rho + 1.0) / rho;
 			normc2 = _LOGGAMMA_INT(n + 1) - my_gsl_sf_lnbeta(a, b);
 			logll[i] = 0.0;
 
@@ -7793,7 +7872,7 @@ int loglikelihood_zeroinflated_betabinomial2(int thread_id, int *UNUSED(lcache_i
 	 */
 #define _PROB(xx)         (exp(xx)/(1.0+exp(xx)))
 #define _PROBZERO(xx)     (1.0-pow(_PROB(xx), alpha))
-#define _LOGGAMMA(xx)     gsl_sf_lngamma(xx)
+#define _LOGGAMMA(xx)     LGAMMAfn(xx)
 #define _LOGGAMMA_INT(xx) my_gsl_sf_lnfact(((xx) - 1))
 
 	if (m == 0) {
@@ -8723,3 +8802,6 @@ int loglikelihood_cloglike(int thread_id, int *UNUSED(lcache_idx), double *__res
 	return GMRFLib_SUCCESS;
 }
 #pragma GCC diagnostic pop
+
+#undef gsl_sf_lnbeta
+#undef my_gsl_sf_lnbeta

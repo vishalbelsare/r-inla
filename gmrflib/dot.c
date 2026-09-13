@@ -6,7 +6,7 @@
 
 #define SUM_CORE_PLAIN(TYPE_, n_)				\
 	TYPE_ r = 0;						\
-	for (int i = 0; i < (n_); i++) {			\
+	for (int i = 0; i < n_; i++) {				\
 		r += x[i];					\
 	}							\
 	return r
@@ -14,10 +14,32 @@
 #define SUM_CORE(TYPE_, n_)					\
 	TYPE_ r = 0;						\
 	_Pragma("omp simd reduction(+: r)")			\
-	for (int i = 0; i < (n_); i++) {			\
+	for (int i = 0; i < n_; i++) {				\
 		r += x[i];					\
 	}							\
 	return r
+
+#define SUM_CORE_UNROLL(TYPE_, n_)				\
+	TYPE_ r = 0;						\
+	TYPE_ s0 = 0, s1 = 0, s2 = 0, s3 = 0;			\
+	TYPE_ s4 = 0, s5 = 0, s6 = 0, s7 = 0;			\
+	int i = 0;						\
+	for (; i < (n_) - 8; i += 8) {				\
+		s0 += x[i];					\
+		s1 += x[i + 1];					\
+		s2 += x[i + 2];					\
+		s3 += x[i + 3];					\
+		s4 += x[i + 4];					\
+		s5 += x[i + 5];					\
+		s6 += x[i + 6];					\
+		s7 += x[i + 7];					\
+	}							\
+	for (; i < n_; i++) {					\
+		r += x[i];					\
+	}							\
+	r += (s0 + s1 + s2 + s3) + (s4 + s5 + s6 + s7);		\
+	return r
+
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wattributes"
@@ -25,9 +47,20 @@ __attribute__((optimize("O3")))
     __attribute__((target_clones(INLA_CLONE_TARGETS "default")))
 double GMRFLib_dsum(int n, double *x)
 {
-	if (likely(n <= 16)) {
-		SUM_CORE_PLAIN(double, n);
+	if (n <= 64) {
+		SUM_CORE_UNROLL(double, n);
+	} else {
+		return GMRFLib_dsum_ext(n, x);
 	}
+}
+#pragma GCC diagnostic pop
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wattributes"
+__attribute__((optimize("O3")))
+    __attribute__((target_clones(INLA_CLONE_TARGETS "default")))
+double GMRFLib_dsum_ext(int n, double *x)
+{
 #if defined(INLA_WITH_OPENBLAS) || defined(INLA_WITH_DSUM)
 	double cblas_dsum(int, double *, int);
 	return cblas_dsum(n, x, 1);
@@ -59,7 +92,7 @@ double GMRFLib_dsum(int n, double *x)
 	n -= k;
 #       include "intrinsics/simde/dsum-sse2.h"
 #else
-	SUM_CORE(double, n);
+	SUM_CORE_UNROLL(double, n);
 #endif
 }
 #pragma GCC diagnostic pop

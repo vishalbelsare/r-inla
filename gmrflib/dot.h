@@ -21,8 +21,8 @@ __BEGIN_DECLS
 #       if defined(INLA_WITH_ARMPL)
 #              include "armpl_sparse.h"
 #       endif
-
 double GMRFLib_dsum(int n, double *x);
+double GMRFLib_dsum_ext(int n, double *x);
 double GMRFLib_sparse_dsum(int n, double *__restrict a, int *__restrict idx);
 double GMRFLib_sparse_dsum_INLINE(int n, double *__restrict a, int *__restrict idx);
 int GMRFLib_isum(int n, int *ix);
