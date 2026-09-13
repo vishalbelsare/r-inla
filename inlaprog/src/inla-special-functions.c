@@ -103,30 +103,18 @@ double inla_logcdf_normal_fast(double x)
 	}
 }
 
-double inla_lgamma_fast1(double x)
+forceinline double inla_ipow(double x, int k)
 {
-	// this is the G.Nemes (2007) approximation from https://en.wikipedia.org/wiki/Stirling's_approximation
-
-	if (round(x) == x) {
-		return gsl_sf_lnfact((int) x - 1);
-	}
-
-	double val;
-	if (x < 1.0) {
-		val = LGAMMAfn(x);
-	} else {
-		double lx = log(x);
-		val = 0.5 * (LOG2PI - lx) + x * (log(x + 1.0 / (12.0 * x - 0.1 / x)) - 1.0);
-	}
-	return (val);
+	// x^k
+	return gsl_sf_pow_int(x, k);
 }
 
-double inla_gamma_fast1(double x)
+forceinline double inla_lgamma(double x) 
 {
-	return (exp(inla_lgamma_fast1(x)));
+	return lgamma(x);
 }
 
-double inla_lgamma_fast2(double x)
+double inla_lgamma_fast(double x)
 {
 	if (unlikely(x <= 0.0)) {
 		return lgamma(x);
@@ -155,9 +143,16 @@ double inla_lgamma_fast2(double x)
 	return -tmp + log(2.5066282746310005 * ser / x);
 }
 
-void inla_lgamma_fast2_m(size_t m, double *restrict x, double *restrict res)
+void inla_lgamma_m(size_t m, double *restrict x, double *restrict res) 
 {
-	// evaluate M calls to lgamma_fast2 together, assume all x[] > 0. this is what is used for the lbeta(a,b) function, for
+	for(size_t i = 0; i < m; i++) {
+		res[i] = lgamma(x[i]);
+	}
+}
+
+void inla_lgamma_fast_m(size_t m, double *restrict x, double *restrict res)
+{
+	// evaluate M calls to lgamma_fast together, assume all x[] > 0. this is what is used for the lbeta(a,b) function, for
 	// which all arguments are positive: lbeta(a,b) := lgamma(a)+lgamma(b)-lgamma(a+b)
 #define G 5
 #define N 7
@@ -172,16 +167,35 @@ void inla_lgamma_fast2_m(size_t m, double *restrict x, double *restrict res)
 	};
 	double tmp[m];
 	for (size_t i = 0; i < m; i++) {
-		tmp[i] = x[i] + G + 0.5;
-		tmp[i] -= (x[i] + 0.5) * log(tmp[i]);
+		double tt = x[i] + G + 0.5;
+		tmp[i] = tt - (x[i] + 0.5) * log(tt);
 	}
+
 	double ser[m];
+#if 0
 	GMRFLib_dfill((int) m, p[0], ser);
-	for (size_t j = 1; j < N; j++) {
-		for (size_t i = 0; i < m; i++) {
-			ser[i] += p[j] / (x[i] + j);
+	for (size_t i = 0; i < m; i++) {
+		double xi = x[i];
+		double s = ser[i];
+		for (size_t j = 1; j < N; j++) {
+			s += p[j] / (xi + j);
 		}
+		ser[i] = s;
 	}
+#else
+	// this is for N==7
+	for (size_t i = 0; i < m; i++) {
+		double xi = x[i];
+		double s = p[0];
+		s += p[1] / (xi + 1.0);
+		s += p[2] / (xi + 2.0);
+		s += p[3] / (xi + 3.0);
+		s += p[4] / (xi + 4.0);
+		s += p[5] / (xi + 5.0);
+		s += p[6] / (xi + 6.0);
+		ser[i] = s;
+	}
+#endif	
 	for (size_t i = 0; i < m; i++) {
 		res[i] = -tmp[i] + log(2.5066282746310005 * ser[i] / x[i]);
 	}
@@ -189,28 +203,31 @@ void inla_lgamma_fast2_m(size_t m, double *restrict x, double *restrict res)
 #undef N
 }
 
-double inla_gamma_fast2(double x)
+forceinline double inla_gamma(double x) 
 {
-	return (exp(inla_lgamma_fast2(x)));
+	return (exp(lgamma(x)));
 }
 
+forceinline double inla_gamma_fast(double x)
+{
+	return (exp(inla_lgamma_fast(x)));
+}
+
+forceinline double inla_beta(double a, double b)
+{
+	return exp(inla_lbeta(a, b));
+}
 
 double inla_lbeta(double a, double b)
 {
 	double x[3] = { a, b, a + b };
 	double res[3] = { 0 };
-	inla_lgamma_fast2_m(3, x, res);
+	LGAMMAfn_m(3, x, res);
 	return res[0] + res[1] - res[2];
-}
-
-double inla_beta(double a, double b)
-{
-	return exp(inla_lbeta(a, b));
 }
 
 void inla_lbeta_m(size_t m, double *restrict a, double *restrict b, double *restrict llbeta)
 {
-	// this is where lgamma_fast2_m() is used
 	double x[3 * m];
 	for (size_t i = 0, j = 0; i < 3 * m; i += 3, j++) {
 		x[i] = a[j];
@@ -218,14 +235,8 @@ void inla_lbeta_m(size_t m, double *restrict a, double *restrict b, double *rest
 		x[i + 2] = a[j] + b[j];
 	}
 	double r[3 * m];
-	inla_lgamma_fast2_m(3 * m, x, r);
+	LGAMMAfn_m(3 * m, x, r);
 	for (size_t i = 0, j = 0; i < 3 * m; i += 3, j++) {
 		llbeta[j] = r[i] + r[i + 1] - r[i + 2];
 	}
-}
-
-double inla_ipow(double x, int k)
-{
-	// x^k
-	return gsl_sf_pow_int(x, k);
 }

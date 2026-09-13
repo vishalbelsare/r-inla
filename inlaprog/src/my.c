@@ -99,36 +99,11 @@ double my_gsl_sf_lnfact(int x)
 
 double my_gsl_sf_lngamma(double x)
 {
-	if (round(x) != x) {
-		return LGAMMAfn(x);
+	if ((int) x == x) {
+		return my_gsl_sf_lnfact((int) (x - 1));
 	} else {
-		// x is an int, then use the cached values
-
-		static int first = 1;
-		static int nmax = 1048576;
-		static double *lng = NULL;
-
-		if (first) {
-#pragma omp critical (Name_72a7f789baa1bbf55989513ddf777ec4ee6c91df)
-			if (first) {
-				lng = Calloc(nmax, double);
-				lng[0] = NAN;
-				lng[1] = 0.0;
-				for (int i = 2; i < nmax; i++) {
-					lng[i] = lng[i - 1] + log((double) (i - 1));
-				}
-				first = 0;
-			}
-		}
-		if (x >= nmax) {
-			return LGAMMAfn(x);
-		} else {
-			return lng[(int) round(x)];
-		}
+		return LGAMMAfn(x);
 	}
-
-	assert(0 == 1);
-	return NAN;
 }
 
 int my_gsl_sf_lnfact_e(const unsigned int n, gsl_sf_result *result)

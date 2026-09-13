@@ -1351,12 +1351,13 @@ int testit(int argc, char **argv)
 	case 52:
 	{
 		for (double x = -0.5; x < 20; x += 0.1) {
-			printf("x %f lgamma %f lgamma.fast.1 %f diff %f lgamma.fast.2 %f diff %f\n",
-			       x, gsl_sf_lngamma(x),
-			       inla_lgamma_fast1(x),
-			       gsl_sf_lngamma(x) - inla_lgamma_fast1(x),
-			       inla_lgamma_fast2(x),
-			       gsl_sf_lngamma(x) - inla_lgamma_fast2(x));
+			printf("x %f gsl.lgamma %f lgamma %f diff %f lgamma.fast %f diff %f\n",
+			       x,
+			       gsl_sf_lngamma(x),
+			       lgamma(x),
+			       gsl_sf_lngamma(x) - lgamma(x),
+			       inla_lgamma_fast(x),
+			       inla_lgamma_fast(x) - lgamma(x));
 		}
 	}
 		break;
@@ -6571,6 +6572,17 @@ int testit(int argc, char **argv)
 	}
 		break;
 
+	case 207:
+	{
+		for(int i = -20; i <= 20; i++) {
+			double x = 5.0 + (double)i / 10;
+			printf("x %g gsl.lgamma %g lgamma %g diff %g (is.integer %s)\n",
+			       x, my_gsl_sf_lngamma(x), lgamma(x), my_gsl_sf_lngamma(x) - lgamma(x),
+			       ((int) x == x ? "TRUE" : "FALSE"));
+		}
+	}
+	break;
+		
 	default:
 	{
 		printf("\nNo such test: %d\n", test_no);

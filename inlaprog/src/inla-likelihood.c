@@ -1,3 +1,4 @@
+// use these here
 #define gsl_sf_lnbeta(a_, b_) LBETAfn(a_, b_)
 #define my_gsl_sf_lnbeta(a_, b_) LBETAfn(a_, b_)
 
@@ -5037,7 +5038,7 @@ int loglikelihood_zeroinflated_negative_binomial0(int thread_id, int *UNUSED(lca
 			/*
 			 * this is constant for the NegativeBinomial 
 			 */
-			lnorm = LGAMMAfn(y + size) - LGAMMAfn(size) - gsl_sf_lnfact((int) y);
+			lnorm = LGAMMAfn(y + size) - LGAMMAfn(size) - my_gsl_sf_lnfact((int) y);
 
 			for (i = 0; i < m; i++) {
 				lambda = PREDICTOR_INVERSE_LINK(x[i], off);
@@ -7916,6 +7917,9 @@ int loglikelihood_zeroinflated_betabinomial1(int thread_id, int *UNUSED(lcache_i
 int loglikelihood_zeroinflated_betabinomial2(int thread_id, int *UNUSED(lcache_idx), double *__restrict logll, double *__restrict x, int m, int idx,
 					     double *UNUSED(x_vec), double *UNUSED(y_cdf), void *arg)
 {
+	// this function is not adapted to inla_lbeta_m(); do that if required. the code was so messy and needs to be cleaned up
+	// first.
+	
 	/*
 	 * zeroinflated BetaBinomial : y ~ prob*1[y=0] + (1-prob)*BetaBinomial(n, p, delta), where logit(p) = x, and prob = 1-p^alpha.
 	 */
